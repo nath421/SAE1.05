@@ -10,10 +10,6 @@ csv_path = None
 md_path = None
 html_path = None
 
-SEUIL_SCAN = 10
-SEUIL_SYN_MID = 25
-SEUIL_SYN_HIGH = 50
-
 # ================= UTILITAIRES =================
 def extract_val(line, keyword):
     if keyword not in line:
@@ -42,6 +38,12 @@ def detecter_attaques(data_rows):
     syn_counts = {}
     alertes_web = []
 
+    # --- NOUVEAUX SEUILS ---
+    LIMIT_SYN_HIGH = 50
+    LIMIT_SYN_MID = LIMIT_SYN_HIGH / 2
+    LIMIT_SCAN_PORTS = 10
+    LIMIT_SCAN_MAX = LIMIT_SCAN_PORTS + 30
+
     for row in data_rows:
         ip_src = row["Source_IP"]
         port_dst = row["Dest_Port"]
@@ -58,10 +60,10 @@ def detecter_attaques(data_rows):
         if "S" in flags:
             syn_counts[ip_src] = syn_counts.get(ip_src, 0) + 1
 
-    # SYN Flood
+    # --- SYN Flood ---
     for ip, count in syn_counts.items():
-        if count >= SEUIL_SYN_MID:
-            niveau = "HIGH" if count >= SEUIL_SYN_HIGH else "MID"
+        if count >= LIMIT_SYN_MID:
+            niveau = "HIGH" if count >= LIMIT_SYN_HIGH else "MID"
             alertes_web.append({
                 "ip": ip,
                 "type": "SYN Flood",
@@ -70,16 +72,17 @@ def detecter_attaques(data_rows):
                 "niveau": niveau
             })
 
-    # Scan de ports
+    # --- Scan de Ports ---
     for ip, ports in scans_ports.items():
-        if len(ports) > SEUIL_SCAN:
+        if len(ports) > LIMIT_SCAN_PORTS:
             total_pkts = packet_count_scan[ip]
+            niveau = "HIGH" if len(ports) >= LIMIT_SCAN_MAX else "MID"
             alertes_web.append({
                 "ip": ip,
                 "type": "Scan de Ports",
                 "nb_packets": total_pkts,
                 "details": f"Scan sur {len(ports)} ports ({total_pkts} paquets)",
-                "niveau": "MID"
+                "niveau": niveau
             })
 
     return alertes_web
@@ -185,11 +188,13 @@ canvas {{ max-width:600px; margin:auto; display:block; }}
 <script>
 new Chart(document.getElementById('src'), {{
 type:'pie',
-data:{{labels:{[ip for ip,_ in top_sources]}, datasets:[{{data:{[c for _,c in top_sources]} }}]}}
+data:{{labels:{[ip for ip,_ in top_sources]}, datasets:[{{data:{[c for _,c in top_sources]} }}]}},
+options:{{responsive:true}}
 }});
 new Chart(document.getElementById('dst'), {{
 type:'pie',
-data:{{labels:{[ip for ip,_ in top_dest]}, datasets:[{{data:{[c for _,c in top_dest]} }}]}}
+data:{{labels:{[ip for ip,_ in top_dest]}, datasets:[{{data:{[c for _,c in top_dest]} }}]}},
+options:{{responsive:true}}
 }});
 </script>
 

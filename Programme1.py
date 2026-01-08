@@ -139,8 +139,9 @@ def generer_rapport_html(data_rows, alertes, dossier_sortie, nom_fichier):
     global html_path
     html_path = os.path.join(dossier_sortie, f"{nom_fichier}_rapport.html")
 
-    top_sources = Counter([row["Source_IP"] for row in data_rows]).most_common(10)
-    top_dest = Counter([row["Dest_IP"] for row in data_rows]).most_common(10)
+    # Top 5
+    top_sources = Counter([row["Source_IP"] for row in data_rows]).most_common(5)
+    top_dest = Counter([row["Dest_IP"] for row in data_rows]).most_common(5)
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(f"""
@@ -175,10 +176,10 @@ canvas {{ max-width:600px; margin:auto; display:block; }}
         f.write(f"""
 </table>
 
-<h2>Top 10 IP sources</h2>
+<h2>Top 5 IP sources</h2>
 <canvas id="src"></canvas>
 
-<h2>Top 10 IP destinations</h2>
+<h2>Top 5 IP destinations</h2>
 <canvas id="dst"></canvas>
 
 <script>
