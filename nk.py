@@ -139,12 +139,22 @@ def parse_tcpdump_flexible(input_path, output_csv):
 
 # ================= RAPPORT HTML =================
 def generer_rapport_html(data_rows, alertes, dossier_sortie, nom_fichier):
+    import webbrowser
+    from collections import Counter
+    import os
+
     global html_path
     html_path = os.path.join(dossier_sortie, f"{nom_fichier}_rapport.html")
 
-    # Top 5
+    # Top 5 IP sources/destinations
     top_sources = Counter([row["Source_IP"] for row in data_rows]).most_common(5)
     top_dest = Counter([row["Dest_IP"] for row in data_rows]).most_common(5)
+
+    labels_src = [ip for ip, _ in top_sources]
+    data_src = [c for _, c in top_sources]
+
+    labels_dst = [ip for ip, _ in top_dest]
+    data_dst = [c for _, c in top_dest]
 
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(f"""
@@ -153,55 +163,135 @@ def generer_rapport_html(data_rows, alertes, dossier_sortie, nom_fichier):
 <head>
 <meta charset="UTF-8">
 <title>Rapport trafic réseau</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body {{ background:#cce5ff; font-family:Arial; padding:20px; }}
-h1,h2 {{ text-align:center; }}
-table {{ margin:auto; border-collapse:collapse; }}
-th,td {{ border:1px solid black; padding:6px; }}
-th {{ background:#ff4d4d; }}
-canvas {{ max-width:600px; margin:auto; display:block; }}
+:root {{
+  --bg:#f4f6f8; --card:#ffffff; --text:#1e1e1e;
+  --accent:#2563eb; --danger:#dc2626; --warning:#f59e0b; --border:#e5e7eb;
+}}
+[data-theme="dark"] {{
+  --bg:#0f172a; --card:#1e293b; --text:#e5e7eb;
+  --accent:#38bdf8; --danger:#f87171; --warning:#fbbf24; --border:#334155;
+}}
+body {{
+  margin:0; font-family:Segoe UI,Arial,sans-serif;
+  background:var(--bg); color:var(--text);
+}}
+header {{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:20px;
+}}
+.toggle {{
+  background:var(--accent); color:white;
+  border:none; padding:8px 14px; border-radius:20px; cursor:pointer;
+}}
+.container {{
+  max-width:1100px; margin:auto; padding:20px; display:grid; gap:20px;
+}}
+.card {{
+  background:var(--card); padding:20px; border-radius:12px;
+  box-shadow:0 10px 25px rgba(0,0,0,.08);
+}}
+table {{ width:100%; border-collapse:collapse; }}
+th,td {{
+  padding:10px; border-bottom:1px solid var(--border); text-align:center;
+}}
+th {{ color:var(--accent); }}
+.badge-high {{
+  background:var(--danger); color:white;
+  padding:4px 10px; border-radius:20px; font-size:0.8rem;
+}}
+.badge-mid {{
+  background:var(--warning); color:black;
+  padding:4px 10px; border-radius:20px; font-size:0.8rem;
+}}
+.grid {{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px;
+}}
+footer {{
+  text-align:center; padding:20px; opacity:.7;
+}}
 </style>
 </head>
-<body>
-<h1>Rapport d'analyse du trafic réseau</h1>
 
-<h2>Menaces détectées</h2>
+<body data-theme="light">
+
+<header>
+  <h1>📡 Rapport d'analyse du trafic réseau</h1>
+  <button class="toggle" onclick="toggleTheme()">🌙 / ☀️</button>
+</header>
+
+<div class="container">
+
+<div class="card">
+<h2>🚨 Menaces détectées</h2>
 <table>
-<tr><th>IP source</th><th>Type</th><th>Nb Paquets</th><th>Détails</th><th>Niveau</th></tr>
+<tr>
+<th>IP source</th><th>Type</th><th>Paquets</th><th>Détails</th><th>Niveau</th>
+</tr>
 """)
+
         if alertes:
             for a in alertes:
-                f.write(f"<tr><td>{a['ip']}</td><td>{a['type']}</td><td>{a['nb_packets']}</td><td>{a['details']}</td><td>{a['niveau']}</td></tr>")
+                badge = "badge-high" if a["niveau"] == "HIGH" else "badge-mid"
+                f.write(f"""
+<tr>
+<td>{a['ip']}</td>
+<td>{a['type']}</td>
+<td>{a['nb_packets']}</td>
+<td>{a['details']}</td>
+<td><span class="{badge}">{a['niveau']}</span></td>
+</tr>
+""")
         else:
             f.write("<tr><td colspan='5'>Aucune menace détectée</td></tr>")
 
         f.write(f"""
 </table>
+</div>
 
+<div class="grid">
+<div class="card">
 <h2>Top 5 IP sources</h2>
-<canvas id="src"></canvas>
+<canvas id="srcChart"></canvas>
+</div>
 
+<div class="card">
 <h2>Top 5 IP destinations</h2>
-<canvas id="dst"></canvas>
+<canvas id="dstChart"></canvas>
+</div>
+</div>
+
+</div>
+
+<footer>Rapport généré automatiquement • Analyse réseau</footer>
 
 <script>
-new Chart(document.getElementById('src'), {{
-type:'pie',
-data:{{labels:{[ip for ip,_ in top_sources]}, datasets:[{{data:{[c for _,c in top_sources]} }}]}},
-options:{{responsive:true}}
+function toggleTheme() {{
+  const b = document.body;
+  b.dataset.theme = b.dataset.theme === "dark" ? "light" : "dark";
+}}
+
+new Chart(document.getElementById('srcChart'), {{
+  type:'doughnut',
+  data:{{ labels:{labels_src}, datasets:[{{ data:{data_src} }}] }},
+  options:{{ responsive:true }}
 }});
-new Chart(document.getElementById('dst'), {{
-type:'pie',
-data:{{labels:{[ip for ip,_ in top_dest]}, datasets:[{{data:{[c for _,c in top_dest]} }}]}},
-options:{{responsive:true}}
+
+new Chart(document.getElementById('dstChart'), {{
+  type:'doughnut',
+  data:{{ labels:{labels_dst}, datasets:[{{ data:{data_dst} }}] }},
+  options:{{ responsive:true }}
 }});
 </script>
 
 </body>
 </html>
 """)
+
     webbrowser.open(f"file://{html_path}")
+
 
 # ================= TRAITEMENT FICHIER =================
 def traiter_fichier(chemin, dossier_sortie):
