@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import os
 import subprocess
 import csv
@@ -38,7 +38,6 @@ def detecter_attaques(data_rows):
     syn_counts = {}
     alertes_web = []
 
-    # --- NOUVEAUX SEUILS ---
     LIMIT_SYN_HIGH = 50
     LIMIT_SYN_MID = LIMIT_SYN_HIGH / 2
     LIMIT_SCAN_PORTS = 10
@@ -60,7 +59,6 @@ def detecter_attaques(data_rows):
         if "S" in flags:
             syn_counts[ip_src] = syn_counts.get(ip_src, 0) + 1
 
-    # --- SYN Flood ---
     for ip, count in syn_counts.items():
         if count >= LIMIT_SYN_MID:
             niveau = "HIGH" if count >= LIMIT_SYN_HIGH else "MID"
@@ -72,7 +70,6 @@ def detecter_attaques(data_rows):
                 "niveau": niveau
             })
 
-    # --- Scan de Ports ---
     for ip, ports in scans_ports.items():
         if len(ports) > LIMIT_SCAN_PORTS:
             total_pkts = packet_count_scan[ip]
@@ -94,7 +91,6 @@ def parse_tcpdump_flexible(input_path, output_csv):
     data_rows = []
 
     if not os.path.exists(input_path):
-        messagebox.showerror("Erreur", f"{input_path} introuvable")
         return [], []
 
     with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -293,18 +289,20 @@ new Chart(document.getElementById('dstChart'), {{
     webbrowser.open(f"file://{html_path}")
 
 
-# ================= TRAITEMENT FICHIER =================
-def traiter_fichier(chemin, dossier_sortie):
-    global csv_path, md_path
 
+# ================= TRAITEMENT FICHIER =================
+def traiter_fichier(chemin, dossier_sortie, listbox_alertes):
+    global csv_path, md_path, html_path
     nom_fichier = os.path.splitext(os.path.basename(chemin))[0]
     csv_path = os.path.join(dossier_sortie, f"{nom_fichier}_output.csv")
     md_path = os.path.join(dossier_sortie, f"{nom_fichier}_report.md")
 
     data_rows, alertes = parse_tcpdump_flexible(chemin, csv_path)
 
+    # Vider la liste et afficher les menaces
+    listbox_alertes.delete(0, tk.END)
     if not data_rows:
-        messagebox.showinfo("Info", "Aucune donnée exploitable")
+        listbox_alertes.insert(tk.END, "Aucune donnée exploitable")
         return None
 
     # Markdown
@@ -315,41 +313,52 @@ def traiter_fichier(chemin, dossier_sortie):
             md.write("| IP source | Type | Nb Paquets | Détails | Niveau |\n|---|---|---|---|---|\n")
             for a in alertes:
                 md.write(f"| {a['ip']} | {a['type']} | {a['nb_packets']} | {a['details']} | {a['niveau']} |\n")
+                # Affichage dans le Listbox
+                listbox_alertes.insert(tk.END, f"{a['ip']:<15} | {a['type']:<12} | {a['nb_packets']:<5} | {a['niveau']}")
         else:
             md.write("Aucune menace détectée\n")
+            listbox_alertes.insert(tk.END, "Aucune menace détectée")
 
     generer_rapport_html(data_rows, alertes, dossier_sortie, nom_fichier)
 
-    if alertes:
-        messagebox.showwarning("Menaces détectées", f"{len(alertes)} menaces détectées")
+    # Activer les boutons
+    btn_csv.config(state="normal")
+    btn_md.config(state="normal")
+    btn_html.config(state="normal")
 
     return csv_path
 
 # ================= TKINTER =================
-def choisir_fichier():
-    chemin = filedialog.askopenfilename(filetypes=[("Fichiers texte", "*.txt"), ("Tous fichiers", "*.*")])
+def choisir_fichier(listbox_alertes):
+    chemin = filedialog.askopenfilename(filetypes=[("Fichiers texte","*.txt"),("Tous fichiers","*.*")])
     if chemin:
         dossier_sortie = filedialog.askdirectory()
         if dossier_sortie:
-            if traiter_fichier(chemin, dossier_sortie):
-                btn_csv.config(state="normal")
-                btn_md.config(state="normal")
-                btn_html.config(state="normal")
+            traiter_fichier(chemin, dossier_sortie, listbox_alertes)
 
 def ouvrir_fichier(path):
     if path and os.path.exists(path):
         os.startfile(path) if os.name=="nt" else subprocess.call(["xdg-open", path])
 
+# ===== Fenêtre principale =====
 fenetre = tk.Tk()
 fenetre.title("Analyseur trafic réseau")
+fenetre.geometry("600x500")
 
-tk.Button(fenetre, text="Choisir fichier TXT", command=choisir_fichier).pack(pady=10)
+tk.Label(fenetre, text="📊 Analyseur de trafic réseau", font=("Segoe UI",14,"bold")).pack(pady=5)
+
+tk.Button(fenetre, text="Choisir fichier TXT", command=lambda: choisir_fichier(listbox_alertes)).pack(pady=5)
 btn_csv = tk.Button(fenetre, text="Ouvrir CSV", command=lambda: ouvrir_fichier(csv_path), state="disabled")
-btn_csv.pack()
+btn_csv.pack(pady=2)
 btn_md = tk.Button(fenetre, text="Ouvrir Markdown", command=lambda: ouvrir_fichier(md_path), state="disabled")
-btn_md.pack()
+btn_md.pack(pady=2)
 btn_html = tk.Button(fenetre, text="Ouvrir HTML", command=lambda: ouvrir_fichier(html_path), state="disabled")
-btn_html.pack()
-tk.Button(fenetre, text="Quitter", command=fenetre.destroy).pack(pady=10)
+btn_html.pack(pady=2)
+
+tk.Label(fenetre, text="Menaces détectées :", font=("Segoe UI",12,"bold")).pack(pady=5)
+listbox_alertes = tk.Listbox(fenetre, width=80, height=15)
+listbox_alertes.pack(pady=5)
+
+tk.Button(fenetre, text="Quitter", command=fenetre.destroy).pack(pady=5)
 
 fenetre.mainloop()
